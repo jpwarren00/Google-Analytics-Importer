@@ -1,299 +1,303 @@
 <?php
-  /*****************************************************************************
-   * This module connects to Google Analytics and filters the tracking
-   * data for consumption by the node_counter table.
-   ****************************************************************************/
-   
-   /**
-    * Hook menu
-    * @return
-    *   $items, an array of the menu items
-    */
-   function ga_importer_menu(){
-		$items['admin/settings/ga-importer'] = array(
-			'title' => 'Google Analytics Importer',
-			'access ararguments' => 'administer_ga_importer',
-			'page callback' => drupal_get_form,
-			'page arguments' => array('ga_importer_form'),
-			'type' => MENU_NORMAL_ITEM,
-		);
-		return $items;
-	}
-	
-    /**
-     * Hook perm
-     */
-    function ga_importer_perm(){
-      return array('administer_ga_importer');
-    }
-    
-    /**
-     * Hook help
-     * @todo
-     * 	write this hook
-     */
-    
-    /**
-     * Administrative form
-     * @return
-     *  $form, an array containing the FAPI data
-     */
-    function ga_importer_form(){
-	    $form['ga_importer']['admin'] = array(
-	      '#type' => 'fieldset',
-	      '#title' => t('Basic Google Analytics Settings'),
-	      '#collapsed' => FALSE,
-	      '#weight' => 0,
-	      '#description' => t('Here you can configure the basic settings of the Google Analytics importer.'),
-	    );
-	    $form['ga_importer']['admin']['frequency']['values'] = array(
-	      'on_cron' => 'Every Cron Run',
-	      'on_node_load' => 'Each time a page is visited',
-	    );
-	    $form['ga_importer']['admin']['frequency'] = array(
-	      '#type' => 'radios',
-	      '#title' => t('Frequency of data update'),
-	      '#options' => $form['ga_importer']['admin']['frequency']['values'],
-	      '#weight' => 1,
-	      '#description' => t('Set the frequency which the site checks Google Analytics to update the node_counter tables.'),
-	      '#default_value' => variable_get('ga_importer_frequency', 'on_cron')
-	    );
-	    $form['ga_importer']['admin']['proportion'] = array(
-	      '#type' => 'textfield',
-	      '#title' => t('Amount of nodes to update on each frequency event.'),
-	      '#weight' => 2,
-	      '#description' => t('Enter the number of nodes to update or a percentage of all nodes to update on each frequency event.'),
-	    );
-	    $form['submit'] = array(
-	      '#type' => 'submit',
-	      '#value' => t('Save')
-	    );
-	    return $form;
-    }
-    
-    /**
-     * Administrative form validate
-     * @param
-     * 	$form, array
-     * 	$form_state, array passed by reference
-     */
-    function ga_importer_form_validate($form, &$form_state){
-      if ( !is_numeric($form_state['values']['proportion']) && preg_match('/(\d+)%/', $form_state['values']['proportion']) == 0 ){
-	form_set_error('', t('Please enter only a number of nodes to process or a percentage to process'));
-      }
-    }
-    
-    /**
-     * Administrative form submit
-     * @param
-     * 	$form, array
-     * 	$form_state, array passed by reference
-     */
-    function ga_importer_form_submit($form, &$form_state){
-      if($form_state['values']['frequency'] != ''){
-	variable_set('ga_importer_frequency', $form_state['values']['frequency']);
-      }
-      if($form_state['values']['proportion'] != ''){
-	variable_set('ga_importer_proportion', $form_state['values']['proportion']);
-      }
-    }
-    
-    /**
-     * Function to parse the URL to determine the node
-     * @param
-     *  $url, a string containing the url from Google Analytics
-     * @return
-     *  $nid, an integer which is the node ID from the URL_ALIAS table
-     */
-    function parse_url_for_nid($url){
-        $normal_path = drupal_get_normal_path($url);
-        global $profile;
-        $proto = $_SERVER['HTTPS'] ? 'https://' : 'http://';
-        $host = $_SERVER['SERVER_NAME'];
-        $base_domain = "$proto$host/";
-        
-        $alias = str_replace($base_domain, '', $normal_path);
-        
-        $alias2nid_sql = "SELECT src FROM {url_alias} WHERE dst='%s'";
-        $node_path = db_result(db_query($alias2nid_sql, $alias));
-        
-        $nid = str_replace('node/', '', $node_path);
-        if( is_numeric($nid) ){
-            return $nid;
-        }
-        else{
-            return FALSE;
-        }
-    }
-    
-    /**
-     * hook cron
-     */
-    function ga_importer_cron(){
-      if (variable_get('ga_importer_frequency', 'on_cron') == 'on_cron'){
-	preop_ga_import('on_cron');
-      }
-    }
-    
-    /**
-     * hook node load
-     */
-    function ga_importer_load(){
-      if (variable_get('ga_importer_frequency', 'on_cron') == 'on_node_load'){
-	preop_ga_import('on_node_load');
-      }
-    }
-    
-    /**
-     * Quick function to find out how many total nodes
-     */
-    function count_nodes(){
-      $sql = "SELECT nid FROM {node}";
-      $data_object = db_query($sql);
-      $count = 0;
-      while( db_fetch_array($data_object) ){
-	$count += 1;
-      }
-      return $count;
-    }
-    
-    /**
-     * This function returns the number of GA results to get based on if the
-     * admin settings.
-     * @param
-     * 	$proportion, a numeric or percentage value of how many GA elements to
-     * 	process on each frequency event.
-     * @return
-     * 	$max_results, the maximum pages to query GA for
-     */
-    function process_proportion($proportion){
-      if ( preg_match('/(\d+)%/', $proportion) > 0 ){
-	$inter = sscanf($proportion, "%d");
-	$percent = ($inter[0] / 100);
-	$totalnodes = count_nodes();
-	$max_results = ($totalnodes * $percent);
-      }
-      else{
-	$max_results = $proportion;
-      }
-      return $max_results;
-    }
-    
-    /**
-     * Function to connect to Google Analytics and retrieve the report object
-     */
-    function ga_importer_get_report(){
-      //$today = date('Y-m-d');
-      $metrics = array('pageViews','visits');
-      $dimensions = array('pagePath');
+// $Id$ //
 
-      // Construct request array.
-      $request = array(
-	'#dimensions' => $dimensions,
-	'#metrics' => $metrics,
-	'#sort_metric' => $sort_metric,
-	'#filter' => $filter,
-	'#start_date' => $start_date,
-	'#end_date' => $end_date,
-	'#start_index' => $start_index,
-	'#max_results' => $max_results,
-      );
-      try {
-	$ga = google_analytics_api_report_data($request);
-      }
-      catch (Exception $e) {
-	return $e->getMessage();
-      }
-      return $ga;
-    }
-    
-    /**
-     * This function preprocesses the service call to work within the limits set
-     * in the administrative menu.
-     *
-     * @param
-     * 	$op, a string value for setting different import process chains
-     * @return
-     * 	$status, a boolean for status value
-     */
-    function preop_ga_import($op){
-      $frequency = variable_get('ga_importer_frequency', 'on_cron');
-      $proportion = variable_get('ga_importer_proportion', '1%');
-      $start_index = variable_get('ga_importer_start_index', '0');
-      $max_results = process_proportion($proportion);
-      
-      //run the GAPI functions
-      $ga = ga_importer_get_report($start_index, $max_results);
-      
-      $status = process_ga_data($ga);
-      
-      //update the start index
-      $new_start_index += $max_results;
-      variable_set('ga_importer_start_index', $new_start_index);
-      
-      return $status;
-    }
-    
-    /**
-     * This function creates objects for drupal_write_record() based on the data
-     * obtained from Google Analytics.
-     * @param
-     * 	$ga, an object containing the Google Analytics data
-     * @return
-     * 	$status, boolean
-     */
-    function process_ga_data($ga){
-      $status = FALSE;
-      
-      foreach($ga as $sub_ga){
-	$node_counter = new stdClass();
-	try{
-	  $node_counter->nid = parse_url_for_nid($sub_ga->getPagePath);
-	}
-	catch(Exception $e) {
-	  watchdog('WATCHDOG_ERROR', "Failed to extract node ID for the path %s", array($sub_ga->getPagePath));
-	}
-	try{
-	  $node_counter->totalcount = $sub_ga->getVisits;
-	}
-	catch(Exception $e) {
-	  	  watchdog('WATCHDOG_ERROR', "Failed to extract totalcount for node %s", array($node_counter->nid));
-	}
-	try{
-	  $node_counter->daycount = $sub_ga->getVisitors;
-	}
-	catch(Exception $e) {
-	  watchdog('WATCHDOG_ERROR', "Failed to extract daycount for node %s", array($node_counter->nid));
-	}
-	$node_counter->timestamp = date('U');
+/**
+ * @file
+ * Hooks Google Analytics data back into Drupal
+ *
+ * This module connects to Google Analytics and filters the tracking
+ * data for consumption by the node_counter table.
+ */
 
-	//within the loop run the write record function
-	if( update_node_counter($node_counter) ){
-	  $status = TRUE;
-	} else {
-	  watchdog('WATCHDOG_ERROR', "Failed to write data to node counter table for node %s", array($node_counter->nid));
-	}
-      }
-      return $status;
+/**
+ * Implementation of hook_menu().
+ */
+function ga_importer_menu() {
+$items['admin/settings/ga-importer'] = array(
+  'title' => 'Google Analytics Importer',
+  'access ararguments' => 'administer_ga_importer',
+  'page callback' => drupal_get_form,
+  'page arguments' => array('ga_importer_form'),
+  'type' => MENU_NORMAL_ITEM,
+);
+return $items;
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function ga_importer_perm() {
+  return array('administer_ga_importer');
+}
+
+/**
+ * Hook help
+ * @todo
+ *  write this hook
+ */
+
+/**
+ * Administrative form
+ * @return
+ *  $form, an array containing the FAPI data
+ */
+function ga_importer_form() {
+  $form['ga_importer']['admin'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Basic Google Analytics Settings'),
+    '#collapsed' => FALSE,
+    '#weight' => 0,
+    '#description' => t('Here you can configure the basic settings of the Google Analytics importer.'),
+  );
+  $form['ga_importer']['admin']['frequency']['values'] = array(
+    'on_cron' => 'Every Cron Run',
+    'on_node_load' => 'Each time a page is visited',
+  );
+  $form['ga_importer']['admin']['frequency'] = array(
+    '#type' => 'radios',
+    '#title' => t('Frequency of data update'),
+    '#options' => $form['ga_importer']['admin']['frequency']['values'],
+    '#weight' => 1,
+    '#description' => t('Set the frequency which the site checks Google Analytics to update the node_counter tables.'),
+    '#default_value' => variable_get('ga_importer_frequency', 'on_cron')
+  );
+  $form['ga_importer']['admin']['proportion'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Amount of nodes to update on each frequency event.'),
+    '#weight' => 2,
+    '#description' => t('Enter the number of nodes to update or a percentage of all nodes to update on each frequency event.'),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save')
+  );
+  return $form;
+}
+
+/**
+ * Administrative form validate
+ * @param
+ *  $form, array
+ *  $form_state, array passed by reference
+ */
+function ga_importer_form_validate($form, &$form_state) {
+  if (!is_numeric($form_state['values']['proportion']) && preg_match('/(\d+)%/', $form_state['values']['proportion']) == 0) {
+    form_set_error('', t('Please enter only a number of nodes to process or a percentage to process'));
+  }
+}
+
+/**
+ * Administrative form submit
+ * @param
+ *  $form, array
+ *  $form_state, array passed by reference
+ */
+function ga_importer_form_submit($form, &$form_state) {
+  if ($form_state['values']['frequency'] != '') {
+variable_set('ga_importer_frequency', $form_state['values']['frequency']);
+  }
+  if ($form_state['values']['proportion'] != '') {
+variable_set('ga_importer_proportion', $form_state['values']['proportion']);
+  }
+}
+
+/**
+ * Function to parse the URL to determine the node
+ * @param
+ *  $url, a string containing the url from Google Analytics
+ * @return
+ *  $nid, an integer which is the node ID from the URL_ALIAS table
+ */
+function parse_url_for_nid($url) {
+    $normal_path = drupal_get_normal_path($url);
+    global $profile;
+    $proto = $_SERVER['HTTPS'] ? 'https://' : 'http://';
+    $host = $_SERVER['SERVER_NAME'];
+    $base_domain = "$proto$host/";
+
+    $alias = str_replace($base_domain, '', $normal_path);
+
+    $alias2nid_sql = "SELECT src FROM {url_alias} WHERE dst='%s'";
+    $node_path = db_result(db_query($alias2nid_sql, $alias));
+
+    $nid = str_replace('node/', '', $node_path);
+    if (is_numeric($nid)) {
+        return $nid;
     }
-    
-    /**
-     * This function runs the drupal write record and returns TRUE or FALSE on
-     * a successful or failed database query.
-     * @param
-     * 	$node_counte, a data object matching the node_counter table schema
-     * @return
-     * 	Boolean status value
-     */
-    function update_node_counter($node_counter){
-      $status = drupal_write_record('node_counter', $node_counter, 'nid');
-      if( $status == 'SAVED_NEW' ){
-	return TRUE;
-      }
-      if( $status == 'SAVED_UPDATED'){
-	return TRUE;
-      }
-      else{
-	return FALSE;
-      }
+    else{
+        return FALSE;
     }
+}
+
+/**
+ * hook cron
+ */
+function ga_importer_cron() {
+  if (variable_get('ga_importer_frequency', 'on_cron') == 'on_cron') {
+    preop_ga_import('on_cron');
+  }
+}
+
+/**
+ * hook node load
+ */
+function ga_importer_load() {
+  if (variable_get('ga_importer_frequency', 'on_cron') == 'on_node_load') {
+    preop_ga_import('on_node_load');
+  }
+}
+
+/**
+ * Quick function to find out how many total nodes
+ */
+function count_nodes() {
+  $sql = "SELECT nid FROM {node}";
+  $data_object = db_query($sql);
+  $count = 0;
+  while (db_fetch_array($data_object)) {
+    $count += 1;
+  }
+  return $count;
+}
+
+/**
+ * This function returns the number of GA results to get based on if the
+ * admin settings.
+ * @param
+ *  $proportion, a numeric or percentage value of how many GA elements to
+ *  process on each frequency event.
+ * @return
+ *  $max_results, the maximum pages to query GA for
+ */
+function process_proportion($proportion) {
+  if ( preg_match('/(\d+)%/', $proportion) > 0 ) {
+    $inter = sscanf($proportion, "%d");
+    $percent = ($inter[0] / 100);
+    $totalnodes = count_nodes();
+    $max_results = ($totalnodes * $percent);
+  }
+  else{
+    $max_results = $proportion;
+  }
+  return $max_results;
+}
+
+/**
+ * Function to connect to Google Analytics and retrieve the report object
+ */
+function ga_importer_get_report() {
+  // $today = date('Y-m-d');
+  $metrics = array('pageViews', 'visits');
+  $dimensions = array('pagePath');
+
+  // Construct request array.
+  $request = array(
+    '#dimensions' => $dimensions,
+    '#metrics' => $metrics,
+    '#sort_metric' => $sort_metric,
+    '#filter' => $filter,
+    '#start_date' => $start_date,
+    '#end_date' => $end_date,
+    '#start_index' => $start_index,
+    '#max_results' => $max_results,
+  );
+  try {
+    $ga = google_analytics_api_report_data($request);
+  }
+  catch (Exception $e) {
+    return $e->getMessage();
+  }
+  return $ga;
+}
+
+/**
+ * This function preprocesses the service call to work within the limits set
+ * in the administrative menu.
+ *
+ * @param
+ *  $op, a string value for setting different import process chains
+ * @return
+ *  $status, a boolean for status value
+ */
+function preop_ga_import($op) {
+  $frequency = variable_get('ga_importer_frequency', 'on_cron');
+  $proportion = variable_get('ga_importer_proportion', '1%');
+  $start_index = variable_get('ga_importer_start_index', '0');
+  $max_results = process_proportion($proportion);
+
+  // run the GAPI functions
+  $ga = ga_importer_get_report($start_index, $max_results);
+
+  $status = process_ga_data($ga);
+
+  // update the start index
+  $new_start_index += $max_results;
+  variable_set('ga_importer_start_index', $new_start_index);
+
+  return $status;
+}
+
+/**
+ * This function creates objects for drupal_write_record() based on the data
+ * obtained from Google Analytics.
+ * @param
+ *  $ga, an object containing the Google Analytics data
+ * @return
+ *  $status, boolean
+ */
+function process_ga_data($ga) {
+  $status = FALSE;
+
+  foreach ($ga as $sub_ga) {
+    $node_counter = new stdClass();
+    try {
+      $node_counter->nid = parse_url_for_nid($sub_ga->getPagePath);
+    }
+    catch (Exception $e) {
+      watchdog('WATCHDOG_ERROR', "Failed to extract node ID for the path %s", array($sub_ga->getPagePath));
+    }
+    try {
+      $node_counter->totalcount = $sub_ga->getVisits;
+    }
+    catch (Exception $e) {
+      watchdog('WATCHDOG_ERROR', "Failed to extract totalcount for node %s", array($node_counter->nid));
+    }
+    try {
+      $node_counter->daycount = $sub_ga->getVisitors;
+    }
+    catch (Exception $e) {
+      watchdog('WATCHDOG_ERROR', "Failed to extract daycount for node %s", array($node_counter->nid));
+    }
+    $node_counter->timestamp = date('U');
+
+    // within the loop run the write record function
+    if (update_node_counter($node_counter)) {
+      $status = TRUE;
+    }
+    else {
+      watchdog('WATCHDOG_ERROR', "Failed to write data to node counter table for node %s", array($node_counter->nid));
+    }
+  }
+  return $status;
+}
+
+/**
+ * This function runs the drupal write record and returns TRUE or FALSE on
+ * a successful or failed database query.
+ * @param
+ *  $node_counte, a data object matching the node_counter table schema
+ * @return
+ *  Boolean status value
+ */
+function update_node_counter($node_counter) {
+  $status = drupal_write_record('node_counter', $node_counter, 'nid');
+  if ($status == 'SAVED_NEW') {
+    return TRUE;
+  }
+  if ($status == 'SAVED_UPDATED') {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}

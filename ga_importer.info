@@ -1,6 +1,6 @@
 ;$Id$
 name = "Google Analytics Importer"
-description = "The Google Analytics Importer collects data from a GA account and uses it to override the existing node_counter statistics.
+description = The Google Analytics Importer collects data from a GA account and uses it to override the existing node_counter statistics.
 core = "6.x"
 version = "0.1_alpha"
 project = "google_analytics"
