@@ -1,23 +1,28 @@
 <?php
-  /**
-   * This file handles some basic setup and removal of variables used to control
-   * the Google Analytics import.
-   */
-  
-  /**
-   * Hook install
-   */
-  function ga_importer_install(){
-    variable_set('ga_importer_frequency', 'on_cron');
-    variable_set('ga_importer_proportion', '1%');
-    variable_set('ga_importer_start_index', '0');
-  }
-  
-  /**
-   * Hook uninstall
-   */
-  function ga_importer_uninstall(){
-    varaible_del('ga_importer_frequency');
-    variable_del('ga_importer_proportion');
-    variable_del('ga_importer_start_index');
-  }
+// $Id$ //
+
+/**
+ * @file
+ * Hooks Google Analytics data back into Drupal
+ *
+ * This file handles some basic setup and removal of variables used to control
+ * the Google Analytics import.
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function ga_importer_install() {
+  variable_set('ga_importer_frequency', 'on_cron');
+  variable_set('ga_importer_proportion', '1%');
+  variable_set('ga_importer_start_index', '0');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function ga_importer_uninstall() {
+  varaible_del('ga_importer_frequency');
+  variable_del('ga_importer_proportion');
+  variable_del('ga_importer_start_index');
+}
