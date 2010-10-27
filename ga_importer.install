@@ -1,13 +1,17 @@
 <?php
+  // $Id$
   /**
+   * @file
    * This file handles some basic setup and removal of variables used to control
    * the Google Analytics import.
    */
   
   /**
    * Hook install
+   * @return
+   *   Void
    */
-  function ga_importer_install(){
+  function ga_importer_install() {
     variable_set('ga_importer_frequency', 'on_cron');
     variable_set('ga_importer_proportion', '1%');
     variable_set('ga_importer_start_index', '0');
@@ -15,8 +19,10 @@
   
   /**
    * Hook uninstall
+   * @return
+   *   Void
    */
-  function ga_importer_uninstall(){
+  function ga_importer_uninstall() {
     varaible_del('ga_importer_frequency');
     variable_del('ga_importer_proportion');
     variable_del('ga_importer_start_index');
