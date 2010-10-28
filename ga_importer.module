@@ -210,14 +210,14 @@
   * Function to connect to Google Analytics and retrieve the report object.
   *
   * @param
-  * 	$dimensions, array
-  * 	$metrics, array
-  * 	$sort_metric, array
-  * 	$filter, array
-  * 	$start_date, array
-  * 	$end_date, array
-  * 	$start_index, array
-  * 	$max_results, array
+  * 	$dimensions, array.  The Google Analytics "Dimensions" parameter.
+  * 	$metrics, array.  The Google Analytics "Metrics" parameter.
+  * 	$sort_metric, array.  The Google Analytics "Sort Metric" parameter.
+  * 	$filter, array.  The Google Analytics "Filter" parameter.
+  * 	$start_date, array.  The Google Analytics "Start Date" parameter.
+  * 	$end_date, array.  The Google Analytics "End Date" parameter.
+  * 	$start_index, array.  The Google Analytics "Start Index" parameter.
+  * 	$max_results, array.  The Google Analytics "Max Results" parameter.
   * @return
   * 	$analytics, array
   */
@@ -397,3 +397,4 @@
       return TRUE;
     }
   }
+  
