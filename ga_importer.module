@@ -163,7 +163,7 @@
   */
   function ga_importer_load() {
     if ( variable_get('ga_importer_frequency', 'on_cron') == 'on_node_load' ) {
-    preop_ga_import('on_node_load');
+      preop_ga_import('on_node_load');
     }
   }
   
@@ -365,7 +365,7 @@
   * 	Boolean status value
   */
   function update_node_counter($node_counter) {
-    if ( node_exists($node_counter->nid )) {
+    if ( node_exists($node_counter->nid ) ) {
       $status = drupal_write_record('node_counter', $node_counter, 'nid');
     }
     else{
